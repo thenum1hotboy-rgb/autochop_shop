@@ -7,7 +7,7 @@ class AppTheme {
     brightness: Brightness.dark,
     primaryColor: Colors.blueAccent,
     scaffoldBackgroundColor: Colors.black,
-    accentColor: Colors.purpleAccent,
+    colorScheme: ColorScheme.dark(secondary: Colors.purpleAccent),
     fontFamily: 'Neon',
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.deepPurple[900],

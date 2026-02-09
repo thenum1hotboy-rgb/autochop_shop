@@ -9,8 +9,8 @@ class FileWatcher {
     if (!await output.exists()) await output.create(recursive: true);
   }
 
-  static void watchInputFolder(Function(List<String>) callback) {
-    ensureFoldersExist(); // auto-create folders
+  static void watchInputFolder(Function(List<String>) callback) async {
+    await ensureFoldersExist();
 
     final folder = Directory('/storage/emulated/0/Download/AutoChopShopInput/');
 

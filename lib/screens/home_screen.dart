@@ -18,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String selectedPreset = 'Houston Screw';
   final AudioPlayer _audioPlayer = AudioPlayer();
   Timer? _waveformTimer;
+  StreamSubscription? _playerCompleteSubscription;
 
   bool batchPreviewMode = false;
   int batchIndex = 0;
@@ -32,7 +33,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _triggerPulse() {
     setState(() => pulse = 1.0);
-    Future.delayed(Duration(milliseconds: 200), () => setState(() => pulse = 0.0));
+    Future.delayed(Duration(milliseconds: 200), () {
+      if (mounted) setState(() => pulse = 0.0);
+    });
   }
 
   void _startProcessing() async {
@@ -40,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await AudioProcessor.processWav(file,
           preset: selectedPreset, onChop: _triggerPulse);
     }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Processing Complete!")),
     );
@@ -51,15 +55,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _waveformTimer?.cancel();
     _waveformTimer = Timer.periodic(Duration(milliseconds: 50), (_) {
-      setState(() {
-        waveformAmp = 0.2 + Random().nextDouble() * 0.8;
-      });
+      if (mounted) {
+        setState(() {
+          waveformAmp = 0.2 + Random().nextDouble() * 0.8;
+        });
+      }
     });
 
+    // Cancel any previous completion listener to prevent listener leak
+    _playerCompleteSubscription?.cancel();
     if (batchPreviewMode) {
-      _audioPlayer.onPlayerComplete.listen((event) {
+      _playerCompleteSubscription =
+          _audioPlayer.onPlayerComplete.listen((event) {
         batchIndex++;
-        if (batchIndex < files.length) _playPreview(files[batchIndex]);
+        if (batchIndex < files.length) {
+          _playPreview(files[batchIndex]);
+        } else {
+          _stopBatchPreview();
+        }
       });
     }
   }
@@ -73,12 +86,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _stopBatchPreview() {
     batchPreviewMode = false;
+    _playerCompleteSubscription?.cancel();
+    _playerCompleteSubscription = null;
     _audioPlayer.stop();
     _waveformTimer?.cancel();
   }
 
   @override
   void dispose() {
+    _playerCompleteSubscription?.cancel();
     _audioPlayer.dispose();
     _waveformTimer?.cancel();
     super.dispose();
@@ -89,7 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(child: CustomPaint(painter: StarfieldPainter(pulse, waveformAmp))),
+          Positioned.fill(
+              child: CustomPaint(
+                  painter: StarfieldPainter(pulse, waveformAmp))),
           SafeArea(
             child: Column(
               children: [
@@ -100,8 +118,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     IconButton(
                         icon: Icon(Icons.settings),
                         onPressed: () {
-                          Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => SettingsScreen()));
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => SettingsScreen()));
                         })
                   ],
                 ),
@@ -109,7 +129,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView.builder(
                     itemCount: files.length,
                     itemBuilder: (_, i) => ListTile(
-                      title: Text(files[i].split('/').last, style: TextStyle(color: Colors.white)),
+                      title: Text(files[i].split('/').last,
+                          style: TextStyle(color: Colors.white)),
                       trailing: IconButton(
                         icon: Icon(Icons.play_arrow, color: Colors.cyanAccent),
                         onPressed: () => _playPreview(files[i]),
@@ -129,8 +150,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Chop Heavy',
                           'Light Chop',
                           'Club Screw'
-                        ].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                        onChanged: (val) => setState(() => selectedPreset = val!),
+                        ]
+                            .map((p) => DropdownMenuItem(
+                                value: p, child: Text(p)))
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => selectedPreset = val!),
                       ),
                       SizedBox(height: 10),
                       ElevatedButton(
@@ -168,10 +193,14 @@ class StarfieldPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
     for (int i = 0; i < 200; i++) {
-      double radius = _rand.nextDouble() * 2 + 1 + pulse * 2 + waveformAmp * 3;
-      paint.color = Colors.blueAccent.withOpacity(0.3 + pulse * 0.5 + waveformAmp * 0.5);
+      double radius =
+          _rand.nextDouble() * 2 + 1 + pulse * 2 + waveformAmp * 3;
+      double opacity =
+          (0.3 + pulse * 0.5 + waveformAmp * 0.5).clamp(0.0, 1.0);
+      paint.color = Colors.blueAccent.withOpacity(opacity);
       canvas.drawCircle(
-        Offset(_rand.nextDouble() * size.width, _rand.nextDouble() * size.height),
+        Offset(_rand.nextDouble() * size.width,
+            _rand.nextDouble() * size.height),
         radius,
         paint,
       );
